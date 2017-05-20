@@ -1,0 +1,45 @@
+@charset "UTF-8";
+
+@font-face {
+	font-family: Literata;
+	src: url("literata-regular.woff2") format("woff2"),
+		 url("literata-regular.woff") format("woff"),
+		 url("literata-regular.ttf") format("truetype"),
+		 url("literata-regular.eot") format("embedded-opentype"),
+		 url("literata-regular.svg") format("svg");
+	font-weight: normal;
+	font-style: normal;
+}
+
+@font-face {
+	font-family: Literata;
+	src: url("literata-bold-italic.woff2") format("woff2"),
+		 url("literata-bold-italic.woff") format("woff"),
+		 url("literata-bold-italic.ttf") format("truetype"),
+		 url("literata-bold-italic.eot") format("embedded-opentype"),
+		 url("literata-bold-italic.svg") format("svg");
+	font-weight: bold;
+	font-style: italic;
+}
+
+@font-face {
+	font-family: "literata-bold";
+	src: url("literata-bold.woff2") format("woff2"),
+		 url("literata-bold.woff") format("woff"),
+		 url("literata-bold.ttf") format("truetype"),
+		 url("literata-bold.eot") format("embedded-opentype"),
+		 url("literata-bold.svg") format("svg");
+	font-weight: bold;
+	font-style: normal;
+}
+
+@font-face {
+	font-family: "literata-italic";
+	src: url("literata-italic.woff2") format("woff2"),
+		 url("literata-italic.woff") format("woff"),
+		 url("literata-italic.ttf") format("truetype"),
+		 url("literata-italic.eot") format("embedded-opentype"),
+		 url("literata-italic.svg") format("svg");
+	font-weight: normal;
+	font-style: italic;
+}
