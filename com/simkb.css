@@ -3,6 +3,9 @@
 	text-align: center;
 	word-spacing: -100%;
 	word-wrap: break-word;
+	word-break: break-all;
+
+	font-family: Consolas;
 }
 
 .com-simkb .input {
@@ -20,9 +23,9 @@
 
 	cursor: default;
 
-	-webkit-user-select: none;
+	/*-webkit-user-select: none;
 	-moz-user-select: none;
-	user-select: none;
+	user-select: none;*/
 
 	word-spacing: normal;
 }

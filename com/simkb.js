@@ -2,7 +2,7 @@
 
 "user strict";
 
-define([], function () {
+define([ "com/kbconf" ], function (kbconf) {
 	var $ = jQuery;
 	loadCSS("com/simkb.css");
 
@@ -25,14 +25,14 @@ define([], function () {
 			key.css("width", config.width);
 		}
 
-		function down() {
+		function down(kb) {
 			has_down = true;
 			key.removeClass("release").addClass("active");
-			if (config.down) config.down();
+			if (config.down) config.down(kb);
 			ev.addc(output);
 		}
 
-		function up() {
+		function up(kb) {
 			if (!has_down) return;
 			has_down = false;
 
@@ -40,20 +40,20 @@ define([], function () {
 			clearInterval(long_press);
 
 			key.addClass("release").removeClass("active");
-			if (config.up) config.up();
+			if (config.up) config.up(kb);
 		}
 
 		var timeout = null;
 		var long_press = null;
 		var has_down = false;
 
-		key.mousedown(function () {
-			down();
+		key.mousedown(function (kb) {
+			down(kb);
 
 			if (!config.no_long_press) {
 				timeout = setTimeout(function () {
 					long_press = setInterval(function () {
-						down();
+						down(kb);
 					}, 30);
 				}, 400);
 			}
@@ -91,28 +91,6 @@ define([], function () {
 				key.html(orig);
 			});
 		}
-
-		// cont.keydown(function (e) {
-		// 	// alert(e.which);
-		// 	if (config.shift_code && e.shiftKey) {
-		// 		key.html(config.shift_code);
-		// 	}
-
-		// 	e.preventDefault();
-		// });
-
-		// cont.keyup(function (e) {
-		// 	if (config.key == e.which) {
-		// 		inactive();
-		// 		if (config.up) config.up();
-		// 	}
-
-		// 	if (config.shift_code && e.which == 16) {
-		// 		key.html(orig);
-		// 	}
-
-		// 	e.preventDefault();
-		// });
 
 		return key;
 	}
@@ -187,13 +165,8 @@ define([], function () {
 			var ret = $("<div></div>");
 			var line, tmp, cont;
 			var len = 0;
-			var empty_line = false;
 
 			var cur_char;
-
-			var orig = cursor.position();
-
-			// cursor.css({ "top": "", "left": "", "position": "" });
 
 			var abspos = text.length + curpos;
 
@@ -202,10 +175,9 @@ define([], function () {
 
 				tmp = len + lines[i].length + 1 /* \n */;
 
-				// alert(tmp);
-
 				if (tmp > abspos && abspos >= len) {
-					// alert("wwww");
+					// the cursor is in this line
+
 					var first = lines[i].substring(0, abspos - len);
 					var second = lines[i].substring(abspos - len);
 
@@ -222,18 +194,18 @@ define([], function () {
 					line.append(cursor);
 					
 					if (cur_char) {
-						cur_char = $("<span style='postition: relative;'>" + cur_char + "</span>");
+						cur_char = $("<span>" + cur_char + "</span>");
 						if (config.cursor.invert)
 							cur_char.addClass("inverted");
 
 						line.append(cur_char);
 					}
 
-					line.append(filt(second));
+					// for (var j = 0; j < second.length; j++) {
+					// 	line.append("<span style='display: inline-block;'>" + filt(second[j]) + "</span>");
+					// }
 
-					if (tmp - len == 1) {
-						empty_line = true;
-					}
+					line.append(filt(second));
 				} else {
 					line = $("<div class='line'>" + filt(lines[i]) + "</div>");
 				}
@@ -241,25 +213,6 @@ define([], function () {
 				len = tmp;
 				ret.append(line);
 			}
-
-			// if (empty_line) {
-			// 	cursor.css("margin-top", -cursor.height() + "px");
-			// } else {
-			// 	cursor.css("margin-top", "");
-			// }
-
-			// setTimeout(function () {
-			// 	var position = cursor.position();
-			// 	var delta = empty_line ? -line.height() + 2 * cursor.height() : 0;
-				
-			// 	console.log(position);
-
-			// 	cursor.css({ "position": "absolute", "top": position.top + delta + "px", "left": position.left + "px" });
-
-			// 	cursor_line.append(filt(next_half));
-			// }, 0);
-
-			// cursor.css("margin-top", char.height() + "px");
 
 			if (config.cursor.width === "auto")
 				cursor.width(char.width());
@@ -271,23 +224,6 @@ define([], function () {
 			
 			if (cur_char)
 				cur_char.css("margin-left", -cursor.width() + "px");
-
-			// setTimeout(function () {
-			// 	var pos = cursor.position();
-
-			// 	cursor.css({
-			// 		"top": orig.top + "px",
-			// 		"left": orig.left + "px",
-			// 		"opacity": "1"
-			// 	});
-
-			// 	setTimeout(function () {
-			// 		cursor.css({
-			// 			"top": pos.top + "px",
-			// 			"left": pos.left + "px"
-			// 		});
-			// 	}, 10);
-			// }, 10);
 
 			return ret;
 		}
@@ -385,13 +321,13 @@ define([], function () {
 
 			if (e.shiftKey) {
 				for (var i = 0; i < reg.onshift.length; i++) {
-					reg.onshift[i]();
+					reg.onshift[i](ret);
 				}
 			}
 
 			if (reg.down[k]) {
 				for (var i = 0; i < reg.down[k].length; i++) {
-					reg.down[k][i]();
+					reg.down[k][i](ret);
 				}
 			}
 
@@ -411,13 +347,13 @@ define([], function () {
 				
 			if (k == 16) {
 				for (var i = 0; i < reg.offshift.length; i++) {
-					reg.offshift[i]();
+					reg.offshift[i](ret);
 				}
 			}
 
 			if (reg.up[k]) {
 				for (var i = 0; i < reg.up[k].length; i++) {
-					reg.up[k][i]();
+					reg.up[k][i](ret);
 				}
 			}
 

@@ -1,0 +1,23 @@
+@charset "UTF-8";
+
+@font-face {
+	font-family: Consolas;
+	src: url("consolas.woff2") format("woff2"),
+		 url("consolas.woff") format("woff"),
+		 url("consolas.ttf") format("truetype"),
+		 url("consolas.eot") format("embedded-opentype"),
+		 url("consolas.svg") format("svg");
+	font-weight: normal;
+	font-style: normal;
+}
+
+@font-face {
+	font-family: Consolas;
+	src: url("consolas-bold.woff2") format("woff2"),
+		 url("consolas-bold.woff") format("woff"),
+		 url("consolas-bold.ttf") format("truetype"),
+		 url("consolas-bold.eot") format("embedded-opentype"),
+		 url("consolas-bold.svg") format("svg");
+	font-weight: bold;
+	font-style: normal;
+}
