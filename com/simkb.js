@@ -117,25 +117,61 @@ define([], function () {
 		return key;
 	}
 
+	var cursor_style = {
+		underline: {
+			width: "auto",
+			height: 2,
+			vertical: "text-bottom",
+			delay: 700 // blinking delay
+		},
+
+		ibeam: {
+			width: 2,
+			height: "1.1em",
+			vertical: "bottom",
+			delay: 800 // blinking delay
+		},
+
+		block: {
+			width: "auto",
+			height: "1.1em",
+			vertical: "bottom",
+			invert: true, // invert the color of the currrent character
+			delay: 500 // blinking delay
+		}
+	};
+
 	// def
 	// [ { code, config }, { code, config }, null /* null stands for a break */, { code, config } ]
 	function genKeyboard(cont, def, config) {
 		cont = $(cont);
-		config = $.extend({}, config);
+		config = $.extend({
+			cursor: cursor_style.underline
+		}, config);
 
 		var kb = $("<div class='com-simkb'></div>");
 		var input = $("<div class='input'></div>");
 		var value = $("<div class='value'></div>");
 		var cursor = $("<div class='cursor'></div>");
 		var keyset = $("<span></span>");
+		var char = $("<span class='char'></span>"); // char width measure
 
 		input.append(value);
+		input.append(char);
 		kb.append(input);
 		kb.append(keyset);
 
 		var text = "";
 		var capslk = false; // TODO: detect?
 		var curpos = 0;
+
+		if (typeof config.cursor.height === "string")
+			cursor.css("height", config.cursor.height);
+		else
+			cursor.height(config.cursor.height);
+
+		if (!config.cursor.invert)
+			cursor.addClass("trans");
 
 		function outenc(text) {
 			function filt(text) {
@@ -153,9 +189,11 @@ define([], function () {
 			var len = 0;
 			var empty_line = false;
 
+			var cur_char;
+
 			var orig = cursor.position();
 
-			cursor.css({ "top": "", "left": "" });
+			// cursor.css({ "top": "", "left": "", "position": "" });
 
 			var abspos = text.length + curpos;
 
@@ -170,9 +208,27 @@ define([], function () {
 					// alert("wwww");
 					var first = lines[i].substring(0, abspos - len);
 					var second = lines[i].substring(abspos - len);
+
+					cur_char = filt(second[0] || "");
+
+					char.html(second[0] == "\t" ? "&nbsp;" : (cur_char || "a"));
+
+					var second = second.substring(1);
 					
 					line = $("<div class='line'>" + filt(first) + "</div>");
+
+					line.height(line.height());
+
 					line.append(cursor);
+					
+					if (cur_char) {
+						cur_char = $("<span style='postition: relative;'>" + cur_char + "</span>");
+						if (config.cursor.invert)
+							cur_char.addClass("inverted");
+
+						line.append(cur_char);
+					}
+
 					line.append(filt(second));
 
 					if (tmp - len == 1) {
@@ -186,11 +242,35 @@ define([], function () {
 				ret.append(line);
 			}
 
-			if (empty_line) {
-				cursor.css("margin-top", "-0.9em");
-			} else {
-				cursor.css("margin-top", "");
-			}
+			// if (empty_line) {
+			// 	cursor.css("margin-top", -cursor.height() + "px");
+			// } else {
+			// 	cursor.css("margin-top", "");
+			// }
+
+			// setTimeout(function () {
+			// 	var position = cursor.position();
+			// 	var delta = empty_line ? -line.height() + 2 * cursor.height() : 0;
+				
+			// 	console.log(position);
+
+			// 	cursor.css({ "position": "absolute", "top": position.top + delta + "px", "left": position.left + "px" });
+
+			// 	cursor_line.append(filt(next_half));
+			// }, 0);
+
+			// cursor.css("margin-top", char.height() + "px");
+
+			if (config.cursor.width === "auto")
+				cursor.width(char.width());
+			else
+				cursor.width(config.cursor.width);
+
+			if (config.cursor.vertical)
+				cursor.css("vertical-align", config.cursor.vertical);
+			
+			if (cur_char)
+				cur_char.css("margin-left", -cursor.width() + "px");
 
 			// setTimeout(function () {
 			// 	var pos = cursor.position();
@@ -219,10 +299,15 @@ define([], function () {
 				.css("max-width", keyset.width() + "px");
 		}
 
-		refresh();
+		setTimeout(function () {
+			refresh();
+		}, 0);
 
 		function addc(c) {
+			line_lock = false;
 			cursor.removeClass("hide");
+
+			if (!c) return;
 
 			switch (c) {
 				case "\b":
@@ -292,7 +377,7 @@ define([], function () {
 
 		setInterval(function () {
 			cursor.toggleClass("hide");
-		}, 700);
+		}, config.cursor.delay || 700);
 
 		$(window).focus();
 		$(window).keydown(function (e) {
@@ -339,6 +424,9 @@ define([], function () {
 			e.preventDefault();
 		});
 
+		var max_col = 0; // max column selected
+		var line_lock = false; // true when only up and down key are every pressed
+
 		var ret = {
 			toggleCapital: function () {
 				capslk = !capslk;
@@ -348,6 +436,8 @@ define([], function () {
 			},
 
 			incPos: function (by) {
+				line_lock = false;
+
 				curpos += by;
 
 				if (curpos > 0) {
@@ -373,8 +463,15 @@ define([], function () {
 				function newpos(linepos, start, end) {
 					// alert(linepos);
 
+					if (!line_lock) {
+						line_lock = true;
+						max_col = linepos;
+					}
+
 					var len = end - start;
-					var shorter = len > linepos ? linepos : len;
+
+					linepos = Math.max(linepos, max_col);
+					var shorter = Math.min(len, linepos);
 
 					// alert(shorter);
 
@@ -390,7 +487,17 @@ define([], function () {
 						var targ_line = i + dir;
 
 						// no target line
-						if (targ_line >= lines.length || targ_line < 0) break;
+						if (targ_line >= lines.length) {
+							// last line
+							curpos = 0;
+							break;
+						}
+
+						if (targ_line < 0) {
+							// first line
+							curpos = -text.length;
+							break;
+						}
 
 						if (dir == 1) {
 							start = tmp;
@@ -418,6 +525,7 @@ define([], function () {
 	}
 
 	return {
-		genKeyboard: genKeyboard
+		genKeyboard: genKeyboard,
+		cursor: cursor_style
 	};
 });

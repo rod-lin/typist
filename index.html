@@ -26,7 +26,7 @@
 
 	<body>
 		<div id="bg" style="position: absolute; top: 0; height: 100%; width: 100%; overflow-y: auto; overflow-x: hidden;">
-			<div id="kb" style="position: fixed; bottom: 1rem; width: 100%;"></div>
+			<div id="kb" style="position: fixed; bottom: 1rem; width: 100%; text-align: center;"></div>
 		</div>
 	</body>
 </html>
@@ -162,7 +162,9 @@
 		], {
 			onChange: function () {
 				vcent.update();
-			}
+			},
+
+			cursor: simkb.cursor.ibeam
 		});
 
 		// $("#cont").focus();

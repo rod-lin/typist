@@ -1,4 +1,5 @@
 .com-simkb {
+	display: inline-block;
 	text-align: center;
 	word-spacing: -100%;
 	word-wrap: break-word;
@@ -7,13 +8,15 @@
 .com-simkb .input {
 	position: relative;
 
-	font-family: Literata;
+	font-family: Consolas;
 	font-weight: bold;
 
 	margin-bottom: 1em;
 	font-size: 1.5rem;
 
 	ime-mode: disabled;
+
+	text-align: left;
 
 	cursor: default;
 
@@ -32,27 +35,39 @@
 }
 
 .com-simkb .line {
+	position: relative;
 	display: inline-block;
 	max-width: 100%;
+	padding: 0 0.2em;
+}
+
+.com-simkb .line .cursor+.inverted {
+	color: white;
+}
+
+.com-simkb .line .cursor.hide+.inverted {
+	color: inherit;
+}
+
+.com-simkb .char {
+	position: absolute;
+	visibility: hidden;
 }
 
 .com-simkb .cursor {
 	display: inline-block;
-	position: absolute;
 	
-	height: 1em;
-	width: 2px;
-
-	margin-top: 0.1em;
-	margin-left: 0;
+	height: 2px;
 
 	background: black;
 
 	opacity: 1;
 
-	vertical-align: middle;
+	vertical-align: text-bottom;
+}
 
-	transition: opacity 0.2s, top 0.1s, left 0.1s;
+.com-simkb .cursor.trans {
+	transition: opacity 0.2s;
 }
 
 .com-simkb .cursor.hide {
