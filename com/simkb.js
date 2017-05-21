@@ -107,6 +107,7 @@ define([ "com/kbconf" ], function (kbconf) {
 			width: 2,
 			height: "1.1em",
 			vertical: "bottom",
+			offset: "0.13em",
 			delay: 800 // blinking delay
 		},
 
@@ -114,6 +115,7 @@ define([ "com/kbconf" ], function (kbconf) {
 			width: "auto",
 			height: "1.1em",
 			vertical: "bottom",
+			offset: "0.13em",
 			invert: true, // invert the color of the currrent character
 			delay: 500 // blinking delay
 		}
@@ -133,9 +135,12 @@ define([ "com/kbconf" ], function (kbconf) {
 		var cursor = $("<div class='cursor'></div>");
 		var keyset = $("<span></span>");
 		var char = $("<span class='char'></span>"); // char width measure
+		var mlineno = $("<div class='lineno' style='position: absolute; visibility: hidden;'></div>"); // lineno measure
 
 		input.append(value);
 		input.append(char);
+		input.append(mlineno);
+
 		kb.append(input);
 		kb.append(keyset);
 
@@ -151,18 +156,128 @@ define([ "com/kbconf" ], function (kbconf) {
 		if (!config.cursor.invert)
 			cursor.addClass("trans");
 
-		function outenc(text) {
-			function filt(text) {
-				return text
-					.replace(/\t/g, "    ")
-					.replace(/ /g, "&nbsp;")
-					.replace(/</g, "&lt;")
-					.replace(/>/g, "&gt;");
+		if (config.cursor.offset) {
+			cursor.css("margin-bottom", config.cursor.offset);
+		}
+
+		function filt(text) {
+			return text
+				.replace(/\t/g, "    ")
+				.replace(/ /g, "&nbsp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;");
+		}
+
+		function refreshLine(lineno, text) {
+			if (!cache) return false;
+
+			var line = cache.lines[lineno];
+			line.dom.html(line.dom.find(".lineno"));
+
+			line.text = text || line.text;
+
+			if (cache.curline == lineno) {
+				cache.lines[lineno] = renderLine(line.dom, line.text, cache.curpos);
+			} else {
+				cache.lines[lineno] = renderLine(line.dom, line.text, -1);
 			}
 
+			if (!line.text)
+				cache.lines[lineno].dom.append("&nbsp;");
+
+			return true;
+		}
+
+		function removeLine(lineno) {
+			if (!cache) return false;
+
+			var rmline = cache.lines[lineno];
+
+			rmline.dom.remove();
+			cache.lines.splice(lineno, 1);
+
+			renderLineno();
+
+			return true;
+		}
+
+		// insert after a lineno
+		function insertLine(lineno, text) {
+			if (!cache) return false;
+
+			var newl = newLine();
+			cache.lines.splice(lineno + 1, 0, renderLine(newl, text, -1));
+			cache.lines[lineno].dom.after(newl);
+
+			renderLineno();
+
+			return true;
+		}
+
+		function renderLine(line, text, curpos) {
+			if (curpos != -1) {
+				var first = text.substring(0, curpos);
+				var second = text.substring(curpos);
+
+				cur_char = filt(second[0] || "");
+
+				char.html(second[0] == "\t" ? "&nbsp;" : (cur_char || "a"));
+
+				second = second.substring(1);
+				
+				line.append(filt(first));
+				line.css("height", line.height() + "px"); // fix height before inserting cursor
+				line.append(cursor);
+				
+				if (cur_char) {
+					cur_char = $("<span>" + cur_char + "</span>");
+					if (config.cursor.invert)
+						cur_char.addClass("inverted");
+
+					line.append(cur_char);
+
+					cur_char.css("margin-left", -cursor.width() + "px");
+				}
+
+				line.append(filt(second));
+			} else {
+				line.append(filt(text));
+			}
+
+			return {
+				dom: line,
+				text: text
+			};
+		}
+
+		var cache;
+
+		function renderLineno() {
+			if (!cache) return;
+
+			refreshPos();
+
+			for (var i = 0; i < cache.lines.length; i++) {
+				var dom = cache.lines[i].dom;
+
+				mlineno.html((i + 1).toString());
+				dom.find(".lineno").html((i + 1).toString()).css({
+					"left": -mlineno.width() - 15 + "px",
+					"opacity": "1"
+				});
+			}
+
+			value.children("br").remove();
+			value.children(".line").before("<br>");
+		}
+
+		function newLine() {
+			return $("<div class='line'><div class='lineno'></div></div>");
+		}
+
+		function renderAll(text) {
 			var lines = text.split(/\n/g);
 
-			var ret = $("<div></div>");
 			var line, tmp, cont;
 			var len = 0;
 
@@ -170,49 +285,38 @@ define([ "com/kbconf" ], function (kbconf) {
 
 			var abspos = text.length + curpos;
 
-			for (var i = 0; i < lines.length; i++) {
-				if (ret) ret.append("<br>");
+			cache = {
+				lines: [],
+				curpos: null,
+				curline: null
+			};
 
+			value.html("");
+
+			for (var i = 0; i < lines.length; i++) {
 				tmp = len + lines[i].length + 1 /* \n */;
 
-				if (tmp > abspos && abspos >= len) {
-					// the cursor is in this line
+				line = newLine();
 
-					var first = lines[i].substring(0, abspos - len);
-					var second = lines[i].substring(abspos - len);
+				var has_cur = tmp > abspos && abspos >= len;
 
-					cur_char = filt(second[0] || "");
-
-					char.html(second[0] == "\t" ? "&nbsp;" : (cur_char || "a"));
-
-					var second = second.substring(1);
-					
-					line = $("<div class='line'>" + filt(first) + "</div>");
-
-					line.height(line.height());
-
-					line.append(cursor);
-					
-					if (cur_char) {
-						cur_char = $("<span>" + cur_char + "</span>");
-						if (config.cursor.invert)
-							cur_char.addClass("inverted");
-
-						line.append(cur_char);
-					}
-
-					// for (var j = 0; j < second.length; j++) {
-					// 	line.append("<span style='display: inline-block;'>" + filt(second[j]) + "</span>");
-					// }
-
-					line.append(filt(second));
-				} else {
-					line = $("<div class='line'>" + filt(lines[i]) + "</div>");
+				if (has_cur) {
+					cache.curline = i;
+					cache.curpos = abspos - len;
 				}
 
+				cache.lines.push(renderLine(line, lines[i], (has_cur ? cache.curpos : -1)));
+
 				len = tmp;
-				ret.append(line);
+
+				if (!lines[i]) {
+					line.append("&nbsp;");
+				}
+
+				value.append(line);
 			}
+
+			renderLineno();
 
 			if (config.cursor.width === "auto")
 				cursor.width(char.width());
@@ -221,18 +325,15 @@ define([ "com/kbconf" ], function (kbconf) {
 
 			if (config.cursor.vertical)
 				cursor.css("vertical-align", config.cursor.vertical);
-			
-			if (cur_char)
-				cur_char.css("margin-left", -cursor.width() + "px");
+		}
 
-			return ret;
+		function refreshPos() {
+			value.find(".line").css("max-width", keyset.width() + "px");
 		}
 
 		function refresh() {
-			value.html(outenc(text));
-
-			value.find(".line")
-				.css("max-width", keyset.width() + "px");
+			renderAll(text);
+			refreshPos();
 		}
 
 		setTimeout(function () {
@@ -253,7 +354,7 @@ define([ "com/kbconf" ], function (kbconf) {
 					break;
 
 				default:
-					var c =  capslk ? c.toUpperCase() : c;
+					c =  capslk ? c.toUpperCase() : c;
 					text =
 						text.substring(0, text.length + curpos) + c +
 						text.substring(text.length + curpos);
@@ -262,10 +363,83 @@ define([ "com/kbconf" ], function (kbconf) {
 			if (config.onChange)
 				config.onChange(text);
 
+			switch (c) {
+				case "\b":
+					if (cache) {
+						if (cache.curpos != 0) {
+							// not the first character
+							var line = cache.lines[cache.curline];
+							line.text =
+								line.text.substring(0, cache.curpos - 1) +
+								line.text.substring(cache.curpos);
+
+							cache.curpos--;
+							refreshLine(cache.curline);
+
+							return;
+						} else {
+							if (cache.curline > 0) {
+
+								var line1 = cache.lines[cache.curline - 1];
+								var line2 = cache.lines[cache.curline];
+
+								cache.curpos = line1.text.length;
+
+								line1.dom.html(line1.dom.find(".lineno"));
+								line1.text = line1.text + line2.text;
+
+								removeLine(cache.curline);
+
+								cache.curline--;
+
+								refreshLine(cache.curline);
+
+								return;
+
+							} else return; // no change
+						}
+					}
+
+					break;
+
+				case "\n":
+					if (cache) {
+						var line = cache.lines[cache.curline];
+
+						var nextl = line.text.substring(cache.curpos);
+						line.text = line.text.substring(0, cache.curpos);
+
+						cache.curpos = 0;
+						cache.curline++;
+
+						refreshLine(cache.curline - 1);
+						insertLine(cache.curline - 1, nextl);
+						refreshLine(cache.curline);
+
+						return;
+					}
+
+					break;
+
+				default:
+					if (cache) {
+						// refresh line only
+						var line = cache.lines[cache.curline];
+						line.text =
+							line.text.substring(0, cache.curpos) + c +
+							line.text.substring(cache.curpos);
+
+						cache.curpos++;
+						refreshLine(cache.curline);
+					}
+
+					return;
+			}
+
 			refresh();
 		}
 
-		$(window).resize(refresh);
+		$(window).resize(refreshPos);
 
 		var reg = {
 			down: {},
@@ -371,6 +545,7 @@ define([ "com/kbconf" ], function (kbconf) {
 				}
 			},
 
+			// by can only be 1 or -1
 			incPos: function (by) {
 				line_lock = false;
 
@@ -378,13 +553,34 @@ define([ "com/kbconf" ], function (kbconf) {
 
 				if (curpos > 0) {
 					curpos = 0;
+					return; // no change
 				}
 
 				if (text.length + curpos < 0) {
 					curpos = -text.length;
+					return; // no change
 				}
 
-				refresh();
+				if (cache) {
+					if (cache.curpos + by < 0) {
+						cache.curline--;
+						cache.curpos = cache.lines[cache.curline].text.length;
+						refreshLine(cache.curline + 1);
+						// alert([ cache.curline, cache.curpos ]);
+					} else if (cache.curpos + by > cache.lines[cache.curline].text.length) {
+						cache.curpos = 0;
+						cache.curline++;
+						refreshLine(cache.curline - 1);
+					} else {
+						cache.curpos += by;
+					}
+
+					// alert([ cache.curline, cache.curpos ]);
+
+					refreshLine(cache.curline);
+				} else {
+					refresh();
+				}
 			},
 
 			// dir: 1 to jump down, -1 to jump up
@@ -411,6 +607,16 @@ define([ "com/kbconf" ], function (kbconf) {
 
 					// alert(shorter);
 
+					cache.curline += dir;
+					cursor_pos = shorter;
+
+					if (cache) {
+						refreshLine(cache.curline - dir);
+						refreshLine(cache.curline);
+					} else {
+						refresh();
+					}
+
 					return start + shorter - text.length;
 				}
 
@@ -426,12 +632,24 @@ define([ "com/kbconf" ], function (kbconf) {
 						if (targ_line >= lines.length) {
 							// last line
 							curpos = 0;
+
+							if (cache) {
+								cache.curpos = cache.lines[cache.curline].text.length;
+								refreshLine(cache.curline);
+							} else refresh();
+							
 							break;
 						}
 
 						if (targ_line < 0) {
 							// first line
 							curpos = -text.length;
+
+							if (cache) {
+								cache.curpos = 0;
+								refreshLine(cache.curline);
+							} else refresh();
+
 							break;
 						}
 
@@ -448,8 +666,6 @@ define([ "com/kbconf" ], function (kbconf) {
 
 					len = tmp;
 				}
-
-				refresh();
 			}
 		};
 
