@@ -251,17 +251,16 @@ define([ "com/kbconf" ], function (kbconf) {
 		}
 
 		var cache;
+		var use_cache = true;
 
 		function renderLineno() {
-			if (!cache) return;
-
 			refreshPos();
 
-			for (var i = 0; i < cache.lines.length; i++) {
-				var dom = cache.lines[i].dom;
+			var lines = value.children(".line");
 
+			for (var i = 0; i < lines.length; i++) {
 				mlineno.html((i + 1).toString());
-				dom.find(".lineno").html((i + 1).toString()).css({
+				$(lines[i]).find(".lineno").html((i + 1).toString()).css({
 					"left": -mlineno.width() - 15 + "px",
 					"opacity": "1"
 				});
@@ -285,11 +284,13 @@ define([ "com/kbconf" ], function (kbconf) {
 
 			var abspos = text.length + curpos;
 
-			cache = {
-				lines: [],
-				curpos: null,
-				curline: null
-			};
+			if (use_cache) {
+				cache = {
+					lines: [],
+					curpos: null,
+					curline: null
+				};
+			}
 
 			value.html("");
 
@@ -300,12 +301,15 @@ define([ "com/kbconf" ], function (kbconf) {
 
 				var has_cur = tmp > abspos && abspos >= len;
 
-				if (has_cur) {
+				if (use_cache && has_cur) {
 					cache.curline = i;
 					cache.curpos = abspos - len;
 				}
 
-				cache.lines.push(renderLine(line, lines[i], (has_cur ? cache.curpos : -1)));
+				var log = renderLine(line, lines[i], (has_cur ? abspos - len : -1));
+				if (use_cache) {
+					cache.lines.push(log);
+				}
 
 				len = tmp;
 
@@ -375,8 +379,6 @@ define([ "com/kbconf" ], function (kbconf) {
 
 							cache.curpos--;
 							refreshLine(cache.curline);
-
-							return;
 						} else {
 							if (cache.curline > 0) {
 
@@ -393,11 +395,10 @@ define([ "com/kbconf" ], function (kbconf) {
 								cache.curline--;
 
 								refreshLine(cache.curline);
-
-								return;
-
-							} else return; // no change
+							} // no change
 						}
+
+						return;
 					}
 
 					break;
@@ -431,9 +432,9 @@ define([ "com/kbconf" ], function (kbconf) {
 
 						cache.curpos++;
 						refreshLine(cache.curline);
+					
+						return;
 					}
-
-					return;
 			}
 
 			refresh();
@@ -607,17 +608,16 @@ define([ "com/kbconf" ], function (kbconf) {
 
 					// alert(shorter);
 
-					cache.curline += dir;
-					cursor_pos = shorter;
+					curpos = start + shorter - text.length;
 
 					if (cache) {
+						cache.curline += dir;
+						cache.curpos = shorter;
 						refreshLine(cache.curline - dir);
 						refreshLine(cache.curline);
 					} else {
 						refresh();
 					}
-
-					return start + shorter - text.length;
 				}
 
 				for (var i = 0; i < lines.length; i++) {
@@ -661,7 +661,7 @@ define([ "com/kbconf" ], function (kbconf) {
 							end = len - 1;
 						}
 
-						curpos = newpos(linepos, start, end);
+						newpos(linepos, start, end);
 					}
 
 					len = tmp;
