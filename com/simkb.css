@@ -5,6 +5,12 @@
 	word-wrap: break-word;
 	word-break: break-all;
 
+	height: 100%;
+	width: 100%;
+
+	box-sizing: border-box;
+	padding: 2rem 0;
+
 	font-family: Consolas;
 }
 
@@ -14,14 +20,15 @@
 	font-family: Consolas;
 	font-weight: bold;
 
-	margin-bottom: 1em;
-	font-size: 1.5rem;
+	font-size: 1.2rem;
 
 	ime-mode: disabled;
 
 	text-align: left;
 
 	cursor: default;
+
+	overflow: hidden;
 
 	/*-webkit-user-select: none;
 	-moz-user-select: none;
@@ -34,7 +41,6 @@
 	display: inline-block;
 	height: 100%;
 	width: 100%;
-	line-height: 120%;
 }
 
 .com-simkb .line {
@@ -67,6 +73,8 @@
 .com-simkb .char {
 	position: absolute;
 	visibility: hidden;
+	top: 0;
+	left: 0;
 }
 
 .com-simkb .cursor {
@@ -87,6 +95,12 @@
 
 .com-simkb .cursor.hide {
 	opacity: 0;
+}
+
+.com-simkb .keyset {
+	display: inline-block;
+	width: auto;
+	margin-top: 1rem;
 }
 
 .com-simkb .key {

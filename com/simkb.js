@@ -105,17 +105,15 @@ define([ "com/kbconf" ], function (kbconf) {
 
 		ibeam: {
 			width: 2,
-			height: "1.1em",
-			vertical: "bottom",
-			offset: "0.13em",
+			height: "1.3em",
+			vertical: "text-bottom",
 			delay: 800 // blinking delay
 		},
 
 		block: {
 			width: "auto",
 			height: "1.1em",
-			vertical: "bottom",
-			offset: "0.13em",
+			vertical: "text-bottom",
 			invert: true, // invert the color of the currrent character
 			delay: 500 // blinking delay
 		}
@@ -133,7 +131,7 @@ define([ "com/kbconf" ], function (kbconf) {
 		var input = $("<div class='input'></div>");
 		var value = $("<div class='value'></div>");
 		var cursor = $("<div class='cursor'></div>");
-		var keyset = $("<span></span>");
+		var keyset = $("<span class='keyset'></span>");
 		var char = $("<span class='char'></span>"); // char width measure
 		var mlineno = $("<div class='lineno' style='position: absolute; visibility: hidden;'></div>"); // lineno measure
 
@@ -144,451 +142,534 @@ define([ "com/kbconf" ], function (kbconf) {
 		kb.append(input);
 		kb.append(keyset);
 
+		cont.append(kb);
+
 		var text = "";
-		var capslk = false; // TODO: detect?
-		var curpos = 0;
-
-		if (typeof config.cursor.height === "string")
-			cursor.css("height", config.cursor.height);
-		else
-			cursor.height(config.cursor.height);
-
-		if (!config.cursor.invert)
-			cursor.addClass("trans");
-
-		if (config.cursor.offset) {
-			cursor.css("margin-bottom", config.cursor.offset);
-		}
-
-		function filt(text) {
-			return text
-				.replace(/\t/g, "    ")
-				.replace(/ /g, "&nbsp;")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;");
-		}
-
-		function refreshLine(lineno, text) {
-			if (!cache) return false;
-
-			var line = cache.lines[lineno];
-			line.dom.html(line.dom.find(".lineno"));
-
-			line.text = text || line.text;
-
-			if (cache.curline == lineno) {
-				cache.lines[lineno] = renderLine(line.dom, line.text, cache.curpos);
-			} else {
-				cache.lines[lineno] = renderLine(line.dom, line.text, -1);
-			}
-
-			if (!line.text)
-				cache.lines[lineno].dom.append("&nbsp;");
-
-			return true;
-		}
-
-		function removeLine(lineno) {
-			if (!cache) return false;
-
-			var rmline = cache.lines[lineno];
-
-			rmline.dom.remove();
-			cache.lines.splice(lineno, 1);
-
-			renderLineno();
-
-			return true;
-		}
-
-		// insert after a lineno
-		function insertLine(lineno, text) {
-			if (!cache) return false;
-
-			var newl = newLine();
-			cache.lines.splice(lineno + 1, 0, renderLine(newl, text, -1));
-			cache.lines[lineno].dom.after(newl);
-
-			renderLineno();
-
-			return true;
-		}
-
-		function renderLine(line, text, curpos) {
-			if (curpos != -1) {
-				var first = text.substring(0, curpos);
-				var second = text.substring(curpos);
-
-				cur_char = filt(second[0] || "");
-
-				char.html(second[0] == "\t" ? "&nbsp;" : (cur_char || "a"));
-
-				second = second.substring(1);
-				
-				line.append(filt(first));
-				line.css("height", line.height() + "px"); // fix height before inserting cursor
-				line.append(cursor);
-				
-				if (cur_char) {
-					cur_char = $("<span>" + cur_char + "</span>");
-					if (config.cursor.invert)
-						cur_char.addClass("inverted");
-
-					line.append(cur_char);
-
-					cur_char.css("margin-left", -cursor.width() + "px");
-				}
-
-				line.append(filt(second));
-			} else {
-				line.append(filt(text));
-			}
-
-			return {
-				dom: line,
-				text: text
-			};
-		}
+		var capslk = false;
+		var relpos = 0; // cursor position in the text
 
 		var cache;
 		var use_cache = true;
 
-		function renderLineno() {
-			refreshPos();
+		var render = {};
+		var ucache = { line: {} };
+		var ev = {};
+		var dir = {};
 
-			var lines = value.children(".line");
+		// main render utils
+		(function () {
+			var cur_blink;
 
-			for (var i = 0; i < lines.length; i++) {
-				mlineno.html((i + 1).toString());
-				$(lines[i]).find(".lineno").html((i + 1).toString()).css({
-					"left": -mlineno.width() - 15 + "px",
-					"opacity": "1"
-				});
+			// HTML encode a text
+			function filt(text) {
+				return text
+					.replace(/\t/g, "    ")
+					.replace(/ /g, "&nbsp;")
+					.replace(/</g, "&lt;")
+					.replace(/>/g, "&gt;");
 			}
 
-			value.children("br").remove();
-			value.children(".line").before("<br>");
-		}
+			render.cursor = function () {
+				if (typeof config.cursor.height === "string")
+					cursor.css("height", config.cursor.height);
+				else
+					cursor.height(config.cursor.height);
 
-		function newLine() {
-			return $("<div class='line'><div class='lineno'></div></div>");
-		}
+				if (!config.cursor.invert)
+					cursor.addClass("trans");
 
-		function renderAll(text) {
-			var lines = text.split(/\n/g);
+				if (config.cursor.offset) {
+					cursor.css("margin-bottom", config.cursor.offset);
+				}
 
-			var line, tmp, cont;
-			var len = 0;
+				clearInterval(cur_blink);
 
-			var cur_char;
+				cur_blink = setInterval(function () {
+					cursor.toggleClass("hide");
+				}, config.cursor.delay || 700);
+			};
 
-			var abspos = text.length + curpos;
+			render.line = function (line, text, curpos) {
+				if (curpos != -1) {
+					var first = text.substring(0, curpos);
+					var second = text.substring(curpos);
 
-			if (use_cache) {
+					cur_char = filt(second[0] || "");
+
+					char.html(second[0] == "\t" ? "&nbsp;" : (cur_char || "a"));
+
+					second = second.substring(1);
+					
+					line.append(filt(first));
+					line.css("height", char.height() + "px"); // fix height before inserting cursor
+					line.append(cursor);
+					
+					if (cur_char) {
+						cur_char = $("<span>" + cur_char + "</span>");
+						if (config.cursor.invert)
+							cur_char.addClass("inverted");
+
+						line.append(cur_char);
+
+						cur_char.css("margin-left", -cursor.width() + "px");
+					}
+
+					line.append(filt(second));
+				} else {
+					line.append(filt(text));
+				}
+
+				return {
+					dom: line,
+					text: text
+				};
+			};
+
+			render.line.template = function () {
+				return $("<div class='line'><div class='lineno'></div></div>");
+			};
+
+			render.lineno = function () {
+				render.pos();
+
+				var lines = value.children(".line");
+
+				for (var i = 0; i < lines.length; i++) {
+					mlineno.html((i + 1).toString());
+					$(lines[i]).find(".lineno").html((i + 1).toString()).css({
+						"left": -mlineno.width() - 15 + "px",
+						"opacity": "1",
+						"line-height": char.height() + "px"
+					});
+				}
+
+				value.children("br").remove();
+				value.children(".line").before("<br>");
+				value.children("br").first().remove();
+			};
+
+			// set the cursor in the view
+			render.view = function () {
+				// alert(line.position());
+				cursor.ready(function () {
+					line = cursor.parent();
+					var top = line.position().top;
+					var height = line.outerHeight(true);
+
+					var scroll = input.scrollTop();
+					var vheight = input.height();
+
+					// alert(top);
+
+					if (top < scroll) {
+						input.scrollTop(top);
+					} else if (top + height > scroll + vheight) {
+						input.scrollTop(top + height - vheight + 2);
+					}
+				});
+			};
+
+			render.pos = function () {
+				value.find(".line").css("max-width", keyset.width() + "px");
+				value.css({
+					"position": "relative",
+					"width": keyset.width() + "px",
+					"left": keyset.position().left + "px"
+				});
+
+				input.css({
+					"width": (keyset.outerWidth() + keyset.position().left) + "px",
+					"height": (kb.height() - keyset.outerHeight(true)) + "px"
+				});
+			};
+
+			// refresh everything
+			render.all = function () {
+				var lines = text.split(/\n/g);
+
+				var line, tmp, cont;
+				var len = 0;
+
+				var cur_char;
+
+				var abspos = text.length + relpos;
+
+				if (use_cache) {
+					ucache.init();
+				}
+
+				value.html("");
+
+				for (var i = 0; i < lines.length; i++) {
+					tmp = len + lines[i].length + 1 /* \n */;
+
+					line = render.line.template();
+
+					var has_cur = tmp > abspos && abspos >= len;
+
+					if (use_cache && has_cur) {
+						ucache.curline(i);
+						ucache.curpos(abspos - len);
+					}
+
+					var log = render.line(line, lines[i], (has_cur ? abspos - len : -1));
+					if (use_cache) {
+						ucache.push(log);
+					}
+
+					len = tmp;
+
+					if (!lines[i]) {
+						line.append("&nbsp;");
+					}
+
+					value.append(line);
+				}
+
+				render.lineno();
+
+				if (config.cursor.width === "auto")
+					cursor.width(char.width());
+				else
+					cursor.width(config.cursor.width);
+
+				if (config.cursor.vertical)
+					cursor.css("vertical-align", config.cursor.vertical);
+
+				render.pos();
+				render.cursor();
+				render.view();
+			};
+		})();
+
+		// line cache util
+		(function () {
+			var cache = null;
+
+			ucache.init = function () {
 				cache = {
 					lines: [],
 					curpos: null,
 					curline: null
 				};
-			}
+			};
 
-			value.html("");
+			ucache.ready = function () {
+				return cache != null;
+			};
 
-			for (var i = 0; i < lines.length; i++) {
-				tmp = len + lines[i].length + 1 /* \n */;
+			ucache.push = function (line) {
+				cache.lines.push(line);
+			};
 
-				line = newLine();
+			// cursor position in the current line
+			ucache.curpos = function (pos) {
+				if (pos !== undefined)
+					return cache.curpos = pos;
+				else
+					return cache.curpos;
+			};
 
-				var has_cur = tmp > abspos && abspos >= len;
+			ucache.curline = function (lineno) {
+				if (lineno !== undefined)
+					return cache.curline = lineno;
+				else
+					return cache.curline;
+			};
 
-				if (use_cache && has_cur) {
-					cache.curline = i;
-					cache.curpos = abspos - len;
+			ucache.get = function (lineno) {
+				return cache.lines[lineno];
+			};
+
+			ucache.getl = function (lineno) {
+				return cache.lines[lineno].text.length;
+			};
+
+			ucache.line.refresh = function (lineno, text) {
+				if (!cache) return false;
+
+				var line = cache.lines[lineno];
+				line.dom.html(line.dom.find(".lineno"));
+
+				line.text = text || line.text;
+
+				if (cache.curline == lineno) {
+					cache.lines[lineno] = render.line(line.dom, line.text, cache.curpos);
+				} else {
+					cache.lines[lineno] = render.line(line.dom, line.text, -1);
 				}
 
-				var log = renderLine(line, lines[i], (has_cur ? abspos - len : -1));
-				if (use_cache) {
-					cache.lines.push(log);
+				if (!line.text)
+					cache.lines[lineno].dom.append("&nbsp;");
+
+				render.view();
+
+				return true;
+			};
+
+			ucache.line.remove = function (lineno) {
+				if (!cache) return false;
+
+				var rmline = cache.lines[lineno];
+
+				rmline.dom.remove();
+				cache.lines.splice(lineno, 1);
+
+				render.lineno();
+
+				return true;
+			};
+
+			// insert after a lineno
+			ucache.line.insert = function (lineno, text) {
+				if (!cache) return false;
+
+				var newl = render.line.template();
+				cache.lines.splice(lineno + 1, 0, render.line(newl, text, -1));
+				cache.lines[lineno].dom.after(newl);
+
+				render.lineno();
+
+				return true;
+			};
+		})();
+
+		// key events
+		(function () {
+			function addc(c) {
+				line_lock = false;
+				cursor.removeClass("hide");
+
+				if (!c) return;
+
+				switch (c) {
+					case "\b":
+						var pos = text.length + relpos;
+						text = text.substring(0, pos - 1) +
+							   text.substring(pos);
+
+						break;
+
+					default:
+						var pos = text.length + relpos;
+						c =  capslk ? c.toUpperCase() : c;
+						text = text.substring(0, pos) + c +
+							   text.substring(pos);
 				}
 
-				len = tmp;
+				if (config.onChange)
+					config.onChange(text);
 
-				if (!lines[i]) {
-					line.append("&nbsp;");
-				}
+				switch (c) {
+					case "\b":
+						if (ucache.ready()) {
+							var curline = ucache.curline();
+							var curpos = ucache.curpos();
 
-				value.append(line);
-			}
+							if (curpos != 0) {
+								// not the first character
+								var line = ucache.get(curline);
+								
+								line.text = line.text.substring(0, curpos - 1) +
+											line.text.substring(curpos);
 
-			renderLineno();
+								ucache.curpos(curpos - 1);
+								ucache.line.refresh(curline);
+							} else if (curline > 0) {
+								var line1 = ucache.get(curline - 1);
+								var line2 = ucache.get(curline);
 
-			if (config.cursor.width === "auto")
-				cursor.width(char.width());
-			else
-				cursor.width(config.cursor.width);
-
-			if (config.cursor.vertical)
-				cursor.css("vertical-align", config.cursor.vertical);
-		}
-
-		function refreshPos() {
-			value.find(".line").css("max-width", keyset.width() + "px");
-		}
-
-		function refresh() {
-			renderAll(text);
-			refreshPos();
-		}
-
-		setTimeout(function () {
-			refresh();
-		}, 0);
-
-		function addc(c) {
-			line_lock = false;
-			cursor.removeClass("hide");
-
-			if (!c) return;
-
-			switch (c) {
-				case "\b":
-					text =
-						text.substring(0, text.length + curpos - 1) +
-						text.substring(text.length + curpos);
-					break;
-
-				default:
-					c =  capslk ? c.toUpperCase() : c;
-					text =
-						text.substring(0, text.length + curpos) + c +
-						text.substring(text.length + curpos);
-			}
-
-			if (config.onChange)
-				config.onChange(text);
-
-			switch (c) {
-				case "\b":
-					if (cache) {
-						if (cache.curpos != 0) {
-							// not the first character
-							var line = cache.lines[cache.curline];
-							line.text =
-								line.text.substring(0, cache.curpos - 1) +
-								line.text.substring(cache.curpos);
-
-							cache.curpos--;
-							refreshLine(cache.curline);
-						} else {
-							if (cache.curline > 0) {
-
-								var line1 = cache.lines[cache.curline - 1];
-								var line2 = cache.lines[cache.curline];
-
-								cache.curpos = line1.text.length;
+								curpos = ucache.curpos(line1.text.length);
 
 								line1.dom.html(line1.dom.find(".lineno"));
 								line1.text = line1.text + line2.text;
 
-								removeLine(cache.curline);
+								ucache.line.remove(curline);
 
-								cache.curline--;
+								curline = ucache.curline(curline - 1);
 
-								refreshLine(cache.curline);
-							} // no change
+								ucache.line.refresh(curline);
+							} // else no change
+
+							return;
 						}
 
-						return;
-					}
+						break;
 
-					break;
+					case "\n":
+						if (ucache.ready()) {
+							var curline = ucache.curline();
+							var curpos = ucache.curpos();
 
-				case "\n":
-					if (cache) {
-						var line = cache.lines[cache.curline];
+							var line = ucache.get(curline);
 
-						var nextl = line.text.substring(cache.curpos);
-						line.text = line.text.substring(0, cache.curpos);
+							var nextl = line.text.substring(curpos);
+							line.text = line.text.substring(0, curpos);
 
-						cache.curpos = 0;
-						cache.curline++;
+							ucache.curpos(0);
+							curline = ucache.curline(curline + 1);
 
-						refreshLine(cache.curline - 1);
-						insertLine(cache.curline - 1, nextl);
-						refreshLine(cache.curline);
+							ucache.line.refresh(curline - 1);
+							ucache.line.insert(curline - 1, nextl);
+							ucache.line.refresh(curline);
 
-						return;
-					}
+							return;
+						}
 
-					break;
+						break;
 
-				default:
-					if (cache) {
-						// refresh line only
-						var line = cache.lines[cache.curline];
-						line.text =
-							line.text.substring(0, cache.curpos) + c +
-							line.text.substring(cache.curpos);
+					default:
+						if (ucache.ready()) {
+							// ucache.line.refresh only
+							var curline = ucache.curline();
+							var curpos = ucache.curpos();
+							var line = ucache.get(curline);
+							line.text =
+								line.text.substring(0, curpos) + c +
+								line.text.substring(curpos);
 
-						cache.curpos++;
-						refreshLine(cache.curline);
-					
-						return;
-					}
+							ucache.curpos(curpos + 1);
+							ucache.line.refresh(curline);
+						
+							return;
+						}
+				}
+
+				render.all();
 			}
 
-			refresh();
-		}
+			var reg = ev.reg = {
+				down: {},
+				up: {},
+				onshift: [],
+				offshift: [],
+				capital: []
+			};
 
-		$(window).resize(refreshPos);
+			var bind = {
+				down: function (k, cb) {
+					if (!reg.down[k]) reg.down[k] = [];
+					reg.down[k].push(cb);
+				},
 
-		var reg = {
-			down: {},
-			up: {},
-			onshift: [],
-			offshift: [],
-			capital: []
-		};
+				up: function (k, cb) {
+					if (!reg.up[k]) reg.up[k] = [];
+					reg.up[k].push(cb);
+				},
 
-		var ev = {
-			down: function (k, cb) {
-				if (!reg.down[k]) reg.down[k] = [];
-				reg.down[k].push(cb);
-			},
+				onshift: function (cb) {
+					reg.onshift.push(cb);
+				},
 
-			up: function (k, cb) {
-				if (!reg.up[k]) reg.up[k] = [];
-				reg.up[k].push(cb);
-			},
+				offshift: function (cb) {
+					reg.offshift.push(cb);
+				},
 
-			onshift: function (cb) {
-				reg.onshift.push(cb);
-			},
+				capital: function (cb) {
+					reg.capital.push(cb);
+				},
 
-			offshift: function (cb) {
-				reg.offshift.push(cb);
-			},
+				addc: addc
+			};
 
-			capital: function (cb) {
-				reg.capital.push(cb);
-			},
+			ev.route = function (handler, arg) {
+				for (var i = 0; i < handler.length; i++) {
+					handler[i](arg);
+				}	
+			};
 
-			addc: addc
-		};
-
-		for (var i = 0; i < def.length; i++) {
-			if (def[i]) {
-				keyset.append(genKey(def[i].code, ev, def[i].config));
-			} else {
-				keyset.append("<br>");
-			}
-		}
-
-		cont.append(kb);
-
-		setInterval(function () {
-			cursor.toggleClass("hide");
-		}, config.cursor.delay || 700);
-
-		$(window).focus();
-		$(window).keydown(function (e) {
-			var k = e.which;
-
-			if (e.shiftKey) {
-				for (var i = 0; i < reg.onshift.length; i++) {
-					reg.onshift[i](ret);
+			// parsing key definition
+			for (var i = 0; i < def.length; i++) {
+				if (def[i]) {
+					keyset.append(genKey(def[i].code, bind, def[i].config));
+				} else {
+					keyset.append("<br>");
 				}
 			}
 
-			if (reg.down[k]) {
-				for (var i = 0; i < reg.down[k].length; i++) {
-					reg.down[k][i](ret);
+			$(window).focus();
+			$(window).keydown(function (e) {
+				var k = e.which;
+
+				// shift events
+				if (e.shiftKey) ev.route(reg.onshift, ret);
+
+				// down events
+				if (reg.down[k]) ev.route(reg.down[k], ret);
+
+				// direction key events
+				if (k == 37 || k == 39) {
+					cursor.removeClass("hide");
+					dir.lr(k - 38);
+				} else if (k == 38 || k == 40) {
+					cursor.removeClass("hide");
+					dir.ud(k - 39);
 				}
-			}
 
-			if (k == 37 || k == 39) {
-				cursor.removeClass("hide");
-				ret.incPos(k - 38);
-			}
-
-			if (k == 38 || k == 40) {
-				cursor.removeClass("hide");
-				ret.jumpLine(k - 39);
-			}
-
-			e.preventDefault();
-		}).keyup(function (e) {
-			var k = e.which;
+				e.preventDefault();
+			}).keyup(function (e) {
+				var k = e.which;
 				
-			if (k == 16) {
-				for (var i = 0; i < reg.offshift.length; i++) {
-					reg.offshift[i](ret);
-				}
-			}
+				if (k == 16) ev.route(reg.offshift, ret);
+				if (reg.up[k]) ev.route(reg.up[k], ret);
 
-			if (reg.up[k]) {
-				for (var i = 0; i < reg.up[k].length; i++) {
-					reg.up[k][i](ret);
-				}
-			}
+				e.preventDefault();
+			});
+		})();
 
-			e.preventDefault();
-		});
-
-		var max_col = 0; // max column selected
-		var line_lock = false; // true when only up and down key are every pressed
-
-		var ret = {
-			toggleCapital: function () {
-				capslk = !capslk;
-				for (var i = 0; i < reg.capital.length; i++) {
-					reg.capital[i](capslk);
-				}
-			},
-
-			// by can only be 1 or -1
-			incPos: function (by) {
+		// direction key operations
+		(function () {
+			var max_col = 0; // max column selected
+			var line_lock = false; // true when only up and down key are every pressed
+	
+			// left(-1) or right(1)
+			dir.lr = function (dir) {
 				line_lock = false;
 
-				curpos += by;
+				relpos += dir;
 
-				if (curpos > 0) {
-					curpos = 0;
+				if (relpos > 0) {
+					relpos = 0;
 					return; // no change
 				}
 
-				if (text.length + curpos < 0) {
-					curpos = -text.length;
+				if (text.length + relpos < 0) {
+					relpos = -text.length;
 					return; // no change
 				}
 
-				if (cache) {
-					if (cache.curpos + by < 0) {
-						cache.curline--;
-						cache.curpos = cache.lines[cache.curline].text.length;
-						refreshLine(cache.curline + 1);
-						// alert([ cache.curline, cache.curpos ]);
-					} else if (cache.curpos + by > cache.lines[cache.curline].text.length) {
-						cache.curpos = 0;
-						cache.curline++;
-						refreshLine(cache.curline - 1);
+				if (ucache.ready()) {
+					var curline = ucache.curline();
+					var curpos = ucache.curpos();
+
+					if (curpos + dir < 0) {
+						// go to the previous line
+						curline = ucache.curline(curline - 1);
+						ucache.curpos(ucache.getl(curline)); // last pos in the line
+						ucache.line.refresh(curline + 1);
+
+					} else if (curpos + dir > ucache.getl(curline)) {
+						// goto the next line
+						ucache.curpos(0);
+						curline = ucache.curline(curline + 1);
+						ucache.line.refresh(curline - 1);
+
 					} else {
-						cache.curpos += by;
+						// move back or forward
+						ucache.curpos(curpos + dir);
 					}
 
-					// alert([ cache.curline, cache.curpos ]);
-
-					refreshLine(cache.curline);
+					ucache.line.refresh(curline);
 				} else {
-					refresh();
+					render.all();
 				}
-			},
+			};
 
-			// dir: 1 to jump down, -1 to jump up
-			jumpLine: function (dir) {
+			// up(-1) or down(1)
+			dir.ud = function (dir) {
 				var lines = text.split("\n");
 				var tmp, len = 0;
-				var abspos = text.length + curpos;
+				var abspos = text.length + relpos;
 				var linepos = null;
 				var newpos;
 				var start, end;
@@ -608,15 +689,19 @@ define([ "com/kbconf" ], function (kbconf) {
 
 					// alert(shorter);
 
-					curpos = start + shorter - text.length;
+					relpos = start + shorter - text.length;
 
-					if (cache) {
-						cache.curline += dir;
-						cache.curpos = shorter;
-						refreshLine(cache.curline - dir);
-						refreshLine(cache.curline);
+					if (ucache.ready()) {
+						var curline = ucache.curline();
+						var curpos = ucache.curpos();
+
+						curline = ucache.curline(curline + dir);
+						ucache.curpos(shorter);
+
+						ucache.line.refresh(curline - dir);
+						ucache.line.refresh(curline);
 					} else {
-						refresh();
+						render.all();
 					}
 				}
 
@@ -631,24 +716,30 @@ define([ "com/kbconf" ], function (kbconf) {
 						// no target line
 						if (targ_line >= lines.length) {
 							// last line
-							curpos = 0;
+							relpos = 0;
 
-							if (cache) {
-								cache.curpos = cache.lines[cache.curline].text.length;
-								refreshLine(cache.curline);
-							} else refresh();
+							if (ucache.ready()) {
+								var curline = ucache.curline();
+								var curpos = ucache.curpos();
+
+								ucache.curpos(ucache.getl(curline));
+								ucache.line.refresh(curline);
+							} else render.all();
 							
 							break;
 						}
 
 						if (targ_line < 0) {
 							// first line
-							curpos = -text.length;
+							relpos = -text.length;
 
-							if (cache) {
-								cache.curpos = 0;
-								refreshLine(cache.curline);
-							} else refresh();
+							if (ucache.ready()) {
+								var curline = ucache.curline();
+								var curpos = ucache.curpos();
+
+								ucache.curpos(0);
+								ucache.line.refresh(curline);
+							} else render.all();
 
 							break;
 						}
@@ -666,12 +757,21 @@ define([ "com/kbconf" ], function (kbconf) {
 
 					len = tmp;
 				}
+			};
+		})();
+
+		// trivial settings
+		kb.ready(function () {
+			$(window).resize(render.pos);
+			render.all();
+		});
+
+		var ret = {
+			toggleCapital: function () {
+				capslk = !capslk;
+				ev.route(ev.reg.capital, capslk);
 			}
 		};
-
-		// setTimeout(function () {
-		// 	ret.incPos(-1);
-		// }, 3000);
 
 		return ret;
 	}
