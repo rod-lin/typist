@@ -541,12 +541,13 @@ define([ "com/kbconf" ], function (kbconf) {
 			var reg = ev.reg = {
 				down: {},
 				up: {},
+				hotkey: {},
 				onshift: [],
 				offshift: [],
 				capital: []
 			};
 
-			var bind = {
+			var bind = ev.bind = {
 				down: function (k, cb) {
 					if (!reg.down[k]) reg.down[k] = [];
 					reg.down[k].push(cb);
@@ -565,6 +566,11 @@ define([ "com/kbconf" ], function (kbconf) {
 					reg.offshift.push(cb);
 				},
 
+				hotkey: function (k, cb) {
+					if (!reg.hotkey[k]) reg.hotkey[k] = [];
+					reg.hotkey[k].push(cb);
+				},
+
 				capital: function (cb) {
 					reg.capital.push(cb);
 				},
@@ -573,6 +579,7 @@ define([ "com/kbconf" ], function (kbconf) {
 			};
 
 			ev.route = function (handler, arg) {
+				if (!handler) return;
 				for (var i = 0; i < handler.length; i++) {
 					handler[i](arg);
 				}	
@@ -587,9 +594,35 @@ define([ "com/kbconf" ], function (kbconf) {
 				}
 			}
 
-			$(window).focus();
-			$(window).keydown(function (e) {
+			/*
+				0         7      8     9       10
+				--------------------------------
+				| keycode | ctrl | alt | shift |
+				--------------------------------
+			 */
+			var encodeKey = ev.encodeKey = function (ev) {
+				return ev.which |
+					(ev.ctrlKey ? (1 << 8) : 0) |
+					(ev.altKey ? (1 << 9) : 0) |
+					(ev.shiftKey ? (1 << 10) : 0);
+			};
+
+			var decodeKey = ev.decodeKey = function (code) {
+				return {
+					which: code & 0xff,
+					ctrlKey: !!(code & (1 << 8)),
+					altKey: !!(code & (1 << 9)),
+					shiftKey: !!(code & (1 << 10))
+				};
+			};
+
+			function down(e) {
 				var k = e.which;
+
+				if (e.ctrlKey) {
+					ev.route(reg.hotkey[encodeKey(e)], ret);
+					return;
+				}
 
 				// shift events
 				if (e.shiftKey) ev.route(reg.onshift, ret);
@@ -605,16 +638,89 @@ define([ "com/kbconf" ], function (kbconf) {
 					cursor.removeClass("hide");
 					dir.ud(k - 39);
 				}
+			}
 
-				e.preventDefault();
-			}).keyup(function (e) {
+			function up(e) {
 				var k = e.which;
 				
 				if (k == 16) ev.route(reg.offshift, ret);
 				if (reg.up[k]) ev.route(reg.up[k], ret);
+			}
 
+			function prevdef(e) {
 				e.preventDefault();
-			});
+			}
+
+			$(window).focus();
+			$(window)
+				.keydown(down).keyup(up)
+				.keydown(prevdef).keyup(prevdef);
+
+			/*
+				Cassette JSON
+
+				// delay refers to the delay to the last code
+				// in ms
+				[ { delay, code, type }, { delay, code, type }, ... ]
+			 */
+
+			var cassette = [];
+			var last_time = 0;
+
+			function delay() {
+				var now = new Date().getTime();
+				var del = now - last_time;
+				last_time = now;
+				return del;
+			}
+
+			function drecord(e) {
+				cassette.push({
+					delay: delay(),
+					code: encodeKey(e),
+					type: "down"
+				});
+			}
+
+			function urecord(e) {
+				cassette.push({
+					delay: delay(),
+					code: encodeKey(e),
+					type: "up"
+				});
+			}
+
+			ev.record = function () {
+				cassette = [];
+				last_time = new Date().getTime();
+				$(window)
+					.off("keydown", drecord).off("keyup", urecord)
+					.keydown(drecord).keyup(urecord);
+			};
+
+			ev.cut = function () {
+				$(window).off("keydown", drecord).off("keyup", urecord)
+				return cassette.slice();
+			};
+
+			ev.replay = function (cas) {
+				function next(i) {
+					if (i >= cas.length) return;
+					var note = cas[i];
+
+					setTimeout(function () {
+						if (note.type == "down") {
+							down(decodeKey(note.code));
+						} else {
+							up(decodeKey(note.code));
+						}
+
+						next(i + 1);
+					}, note.delay);
+				}
+
+				next(0);
+			};
 		})();
 
 		// direction key operations
@@ -772,6 +878,32 @@ define([ "com/kbconf" ], function (kbconf) {
 				ev.route(ev.reg.capital, capslk);
 			}
 		};
+
+		ev.bind.hotkey(ev.encodeKey({
+			which: 82, // r
+			ctrlKey: true,
+			shiftKey: true
+		}), function () {
+			console.log("record");
+			ev.record();
+		});
+
+		ev.bind.hotkey(ev.encodeKey({
+			which: 69, // e
+			ctrlKey: true,
+			shiftKey: true
+		}), function () {
+			console.log(ev.cut());
+		});
+
+		ev.bind.hotkey(ev.encodeKey({
+			which: 84, // t
+			ctrlKey: true,
+			shiftKey: true
+		}), function () {
+			console.log("replay");
+			ev.replay(ev.cut());
+		});
 
 		return ret;
 	}
