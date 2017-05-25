@@ -252,18 +252,21 @@ define([ "com/kbconf" ], function (kbconf) {
 			render.view = function () {
 				// alert(line.position());
 				cursor.ready(function () {
-					line = cursor.parent();
-					var top = line.position().top;
-					var height = line.outerHeight(true);
+					var top, height;
+
+					top = cursor.offset().top - value.offset().top + cursor.height() - char.height();
+					height = char.height();
+
+					console.log([ top, height ]);
 
 					var scroll = input.scrollTop();
 					var vheight = input.height();
 
-					// alert(top);
-
 					if (top < scroll) {
+						console.log("case 1");
 						input.scrollTop(top);
 					} else if (top + height > scroll + vheight) {
+						console.log("case 2");
 						input.scrollTop(top + height - vheight + 2);
 					}
 				});
