@@ -42,7 +42,7 @@
 			.appendTo("head");
 	}
 	
-	require([ "lib/vcent", "com/simkb", "com/kbconf" ], function (vcent, simkb, kbconf) {
+	require([ "lib/vcent", "com/simkb", "com/kbconf", "com/speak" ], function (vcent, simkb, kbconf, speak) {
 		var kb = simkb.genKeyboard("#kb", kbconf.qwerty, {
 			onChange: function () {
 				vcent.update();

@@ -379,7 +379,7 @@ define([], function () {
 				}
 
 				if (config.onChange)
-					config.onChange(text);
+					config.onChange(text, c);
 
 				switch (c) {
 					case "\b":
@@ -531,6 +531,8 @@ define([], function () {
 			function down(e) {
 				var k = e.which;
 
+				// console.log(k);
+
 				if (e.ctrlKey) {
 					ev.route(reg.hotkey[encodeKey(e)]);
 					return;
@@ -618,9 +620,14 @@ define([], function () {
 				return cassette.slice();
 			};
 
+			var next_proc = null;
+			var replay_acc = 1;
+
 			ev.replay = function (cas) {
 				ev.cut();
 				dot.addClass("replay");
+
+				replay_acc = 1;
 
 				function next(i) {
 					if (i >= cas.length) {
@@ -630,7 +637,7 @@ define([], function () {
 
 					var note = cas[i];
 
-					setTimeout(function () {
+					next_proc = setTimeout(function () {
 						if (note.type == "down") {
 							down(decodeKey(note.code));
 						} else {
@@ -638,11 +645,20 @@ define([], function () {
 						}
 
 						next(i + 1);
-					}, note.delay);
+					}, note.delay / replay_acc);
 				}
 
 				next(0);
 			};
+
+			ev.stopReplay = function () {
+				clearTimeout(next_proc);
+				dot.removeClass("replay");
+			};
+
+			ev.replayAcc = function (acc) {
+				replay_acc *= acc;
+			}
 		})();
 
 		// direction key operations
@@ -794,7 +810,10 @@ define([], function () {
 		});
 
 		var ret = {
-			ev: ev
+			ev: ev,
+			val: function () {
+				return text;
+			}
 		};
 
 		return ret;

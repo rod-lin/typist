@@ -2,7 +2,7 @@
 
 "user strict";
 
-define([ "com/kbconf", "com/siminp" ], function (kbconf, siminp) {
+define([ "com/kbconf", "com/siminp", "com/speak" ], function (kbconf, siminp, speak) {
 	loadCSS("com/simkb.css");
 
 	function parseKey(e) {
@@ -103,7 +103,7 @@ define([ "com/kbconf", "com/siminp" ], function (kbconf, siminp) {
 		var kb = $("<div class='com-simkb'><div class='input'></div></div>");
 		var keyset = $("<span class='keyset'></span>");
 
-		var input = siminp.init(kb.find(".input"), { align: keyset });
+		var input = siminp.init(kb.find(".input"), { align: keyset, onChange: function (val, c) { speakInput(val, c); } });
 
 		kb.append(keyset);
 		cont.append(kb);
@@ -152,6 +152,47 @@ define([ "com/kbconf", "com/siminp" ], function (kbconf, siminp) {
 			console.log("replay");
 			input.ev.replay(input.ev.cut());
 		});
+
+		input.ev.bind.hotkey(input.ev.encodeKey({
+			which: 52, // 4
+			ctrlKey: true
+		}), function () {
+			console.log("stop replay");
+			input.ev.stopReplay();
+		});
+
+		input.ev.bind.hotkey(input.ev.encodeKey({
+			which: 53, // 5
+			ctrlKey: true
+		}), function () {
+			console.log("replay acc");
+			input.ev.replayAcc(1.5);
+		});
+
+		var word_start = true;
+
+		function speakInput(val, c) {
+			switch (c) {
+				case " ":
+				case "\t":
+				case "\n":
+				case ".":
+				case ",":
+				case "-":
+					if (word_start) {
+						var words = val.split(/[,\s.\-]+/g);
+						speak.speak(words[words.length - 2]);
+						word_start = false;
+					}
+
+					break;
+
+				case "\b": break;
+
+				default:
+					word_start = true;
+			}
+		}
 
 		return ret;
 	}
